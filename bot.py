@@ -12,7 +12,7 @@ import sqlite3
 import requests
 #requests.post('https://api.telegram.org/bot5134551401:AAGsCzW7j9mTBX8aNC3HRyZX2j68wR4Y5KY/sendMessage?chat_id=@transport_helo_vienna&text='+)
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, Contact
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 from telegram.ext import MessageHandler, Filters
 
@@ -29,6 +29,18 @@ def reset_button():
 	]
 	return InlineKeyboardMarkup(keyboard)
 
+def get_contact():
+	keyboard = [
+		[
+			KeyboardButton("Поделиться контактом", request_contact=True),
+		],
+	]
+	return ReplyKeyboardMarkup(keyboard, resize_keyboard=True,one_time_keyboard=True)
+
+def get_phone_number(update: Update, context: CallbackContext):
+	context.bot.send_message(chat_id=update.effective_chat.id, text="Пожалуйста, поделитесь вашим контактом.", reply_markup=get_contact())
+
+
 #Writing to DB and sending the message
 def open_db():
 	try:
@@ -44,13 +56,28 @@ def close_db(conn):
 
 user_info = {}
 
-def send_message(update: Update, context: CallbackContext, button):
-	def remove_markdown(string):
+def remove_markdown(string):
 		return string.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
 
+def send_message(update: Update, context: CallbackContext, button):
+	
+	def phone_number(update: Update, context: CallbackContext):
+		tel_number = user_info[update.effective_user.id]["phone_number"]
+		def check_plus(tel_number):
+			if '+' not in tel_number:
+				telephone_number = '+' + str(tel_number)
+				print(telephone_number)
+				return telephone_number
+			else:
+				return tel_number
+		
+		if len(tel_number) > 0:
+			return ' (номер телефона ' + check_plus(tel_number) + ')'
+
 	if button == 'Button_MaterialAid':
+		
 		message = (
-		'✅ Новая заявка от ' + remove_markdown(user_info[update.effective_user.id]["user_name"]) + ' на вещи и медикаменты\n' +
+		'✅ Новая заявка от ' + remove_markdown(user_info[update.effective_user.id]["user_name"]) + phone_number(update, context) + ' на вещи и медикаменты\n' +
 		'- - - - - - - - - - - - - - -\n' +
 		'*Список необходимого:* \n' +
 		user_info[update.effective_user.id]["reply1"] + '\n' +
@@ -58,11 +85,12 @@ def send_message(update: Update, context: CallbackContext, button):
 		user_info[update.effective_user.id]["reply2"] + '\n' +
 		'*Куда доставить:* \n' +
 		user_info[update.effective_user.id]["reply3"])
-		context.bot.send_message(chat_id="@material_aid_in_vienna", text=message, parse_mode="Markdown")
+		msg = context.bot.send_message(chat_id="@material_aid_in_vienna", text=message, parse_mode="Markdown")
+		return msg
 		#requests.post('https://api.telegram.org/bot5134551401:AAGsCzW7j9mTBX8aNC3HRyZX2j68wR4Y5KY/sendMessage?chat_id=@transport_helo_vienna&text='+ message + '&parse_mode=Markdown')
 	elif button == 'Button_Transport':
 		message = (
-		'✅ Новая заявка от ' + remove_markdown(user_info[update.effective_user.id]["user_name"]) + ' на транспортировку\n' +
+		'✅ Новая заявка от ' + remove_markdown(user_info[update.effective_user.id]["user_name"]) + phone_number(update, context) + ' на транспортировку\n' +
 		'- - - - - - - - - - - - - - -\n' +
 		'*Откуда:* \n' +
 		user_info[update.effective_user.id]["reply1"] + '\n' +
@@ -72,10 +100,11 @@ def send_message(update: Update, context: CallbackContext, button):
 		user_info[update.effective_user.id]["reply3"]	+'\n' +
 		'*Информация о поездке:* \n' +
 		user_info[update.effective_user.id]["reply4"])
-		requests.post('https://api.telegram.org/bot5134551401:AAGsCzW7j9mTBX8aNC3HRyZX2j68wR4Y5KY/sendMessage?chat_id=@transport_helo_vienna&text='+ message + '&parse_mode=Markdown')
+		msg = context.bot.send_message(chat_id="@transport_in_vienna", text=message, parse_mode="Markdown")
+		return msg
 	elif button == 'Button_Translation':
 		message = (
-		'✅ Новая заявка от ' + remove_markdown(user_info[update.effective_user.id]["user_name"]) + ' на перевод с/на немецкий\n' +
+		'✅ Новая заявка от ' + remove_markdown(user_info[update.effective_user.id]["user_name"]) + phone_number(update, context) + ' на языковую помощь\n' +
 		'- - - - - - - - - - - - - - -\n' +
 		'*Что необходимо перевести:* \n' +
 		user_info[update.effective_user.id]["reply1"] + '\n' +
@@ -83,10 +112,11 @@ def send_message(update: Update, context: CallbackContext, button):
 		user_info[update.effective_user.id]["reply2"] + '\n' +
 		'*На когда:* \n' +
 		user_info[update.effective_user.id]["reply3"])
-		requests.post('https://api.telegram.org/bot5134551401:AAGsCzW7j9mTBX8aNC3HRyZX2j68wR4Y5KY/sendMessage?chat_id=@transport_helo_vienna&text='+ message + '&parse_mode=Markdown')
+		msg = context.bot.send_message(chat_id="@translations_in_vienna", text=message, parse_mode="Markdown")
+		return msg
 	elif button == 'Button_Accomponation':
 		message = (
-		'✅ Новая заявка от ' + remove_markdown(user_info[update.effective_user.id]["user_name"]) + ' на сопровождение\n' +
+		'✅ Новая заявка от ' + remove_markdown(user_info[update.effective_user.id]["user_name"]) + phone_number(update, context) + ' на сопровождение\n' +
 		'- - - - - - - - - - - - - - -\n' +
 		'*Куда необходимо сопроводить:* \n' +
 		user_info[update.effective_user.id]["reply1"] + '\n' +
@@ -94,18 +124,19 @@ def send_message(update: Update, context: CallbackContext, button):
 		user_info[update.effective_user.id]["reply2"] + '\n' +
 		'*Доп. информация:* \n' +
 		user_info[update.effective_user.id]["reply3"])		
-		requests.post('https://api.telegram.org/bot5134551401:AAGsCzW7j9mTBX8aNC3HRyZX2j68wR4Y5KY/sendMessage?chat_id=@transport_helo_vienna&text='+ message + '&parse_mode=Markdown')
+		msg = context.bot.send_message(chat_id="@accomponation_in_vienna", text=message, parse_mode="Markdown")
+		return msg
 
 
-def db_table_val(user_id: int, user_name: str, role: str, status: int, reply1: str, reply2: str, reply3: str, reply4: str):
+def db_table_val(user_id: int, user_name: str, phone_number: str, got_contact: bool, role: str, status: int, reply1: str, reply2: str, reply3: str, reply4: str):
 	db_conn = open_db()
 	cursor = db_conn[0]
 	conn = db_conn[1]
-	cursor.execute('INSERT INTO users (user_id,user_name,role,status,reply1,reply2,reply3,reply4) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (user_id,user_name,role, status,reply1,reply2,reply3,reply4,))
+	cursor.execute('INSERT INTO users (user_id,user_name,phone_number,got_contact,role,status,reply1,reply2,reply3,reply4) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (user_id,user_name,phone_number,got_contact,role,status,reply1,reply2,reply3,reply4,))
 	conn.commit()
 	close_db(conn)
 	
-
+'''
 def before_start(update: Update, context: CallbackContext):
 	button = [[KeyboardButton("Press me!")]]
 	#keyboard = ReplyKeyboardMarkup(button, one_time_keyboard=True)
@@ -122,15 +153,14 @@ def before_start(update: Update, context: CallbackContext):
 	print(msg.message_id)
 	#context.bot.edit_message_text(text=f"Пожалуйста, напишите, откуда вас нужно перевезти: ", chat_id="@transport_helo_vienna",message_id=500)
 	#context.bot.copyMessage(chat_id="@dead_channel_test", from_chat_id="@transport_helo_vienna", message_id=1)
-	
+	'''
 		
 
 def start(update: Update, context: CallbackContext):
 	"""Sends a message with three inline buttons attached."""
-	user_info[update.effective_user.id] = {"user_id":"", "user_name":"", "role":"", "status":-1, "chosen_button":"", "reply1":"", "reply2":"", "reply3":"", "reply4":""}
-	user_info[update.effective_user.id]["status"] = -1
-
+	user_info[update.effective_user.id] = {"user_id":"", "user_name":"", "phone_number":"", "got_contact":False, "role":"", "status":-1, "chosen_button":"", "reply1":"", "reply2":"", "reply3":"", "reply4":""}
 	
+
 	keyboard = [
 		[
 			InlineKeyboardButton("🙏 Получить помощь", callback_data='Button_NeedHelp'),
@@ -140,8 +170,8 @@ def start(update: Update, context: CallbackContext):
 
 	reply_markup = InlineKeyboardMarkup(keyboard)
 
-	context.bot.send_message(chat_id=update.effective_chat.id, text="Этот бот был создан для поиска и оказания взаимопомощи людям, оказавшимся в Вене из-за войны в Украине 🇺🇦 \nПожалуйста, укажите, хотите ли вы получить помощь или ее оказать:", reply_markup=reply_markup)
-	
+	context.bot.send_message(chat_id=update.effective_chat.id, text="Этот бот был создан для поиска и оказания взаимопомощи людям, оказавшимся в Вене из-за войны в Украине 🇺🇦 \nПожалуйста, укажите, хотите ли вы получить помощь или ее оказать:", reply_markup=(reply_markup))
+
 def handleButton_need_help(update: Update, context: CallbackContext):
 	keyboard = [
 		[
@@ -162,19 +192,20 @@ def handleButton_need_help(update: Update, context: CallbackContext):
 	query = update.callback_query
 	query.edit_message_text(text="Пожалуйста, выберите вид помощи, в которой вы нуждаетесь:", reply_markup=reply_markup)
 
-#context.bot.send_message(chat_id=update.effective_chat.id, )
 
 def handleButton_provide_help(update: Update, context: CallbackContext):
 	message = (
 			'Ссылки на группы: \n' +
 			'- - - - - - - - - - - - - - -\n' +
 			'*Вещи и медикаменты:* \n' +
-			"LINK 1" + '\n' +
+			remove_markdown('https://t.me/material_aid_in_vienna') + '\n' +
 			'*Транспорт:* \n' +
-			"LINK 2" + '\n' +
-			'*Перевод:* \n' +
-			"LINK 3")
-
+			remove_markdown('https://t.me/transport_in_vienna') + '\n' +
+			'*Языковая помощь:* \n' +
+			remove_markdown('https://t.me/translations_in_vienna') + '\n' +
+			'*Сопровождение:* \n' +
+			remove_markdown('https://t.me/accomponation_in_vienna'))
+	
 	context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode="Markdown", reply_markup=reset_button())
 
 
@@ -189,7 +220,16 @@ def callbackHandler(update: Update, context: CallbackContext) -> None:
 	if userInput == "Button_Restart":
 		start(update, context)
 		return
-#	print_need_help(update, context)
+	
+	if ((userInput == "Button_ProvideHelp") and (user_info[update.effective_user.id]["role"] == "Button_NeedHelp")):
+		start(update, context)
+		return
+
+	if ((userInput == "Button_NeedHelp") and (user_info[update.effective_user.id]["role"] == "Button_ProvideHelp")):
+		start(update, context)
+		return
+
+
 	user_info[update.effective_user.id]["user_id"] = update.effective_user.id
 	user_info[update.effective_user.id]["user_name"] = update.effective_user.name
 	if user_info[update.effective_user.id]["status"] == -1:
@@ -242,6 +282,10 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 	if user_info[update.effective_user.id]["status"] != 0:
 		user_info[update.effective_user.id]["status"] += 1
 
+def handle_contacts(update: Update, context: CallbackContext) -> None:
+	user_info[update.effective_user.id]["phone_number"] = update.message.contact.phone_number
+	user_info[update.effective_user.id]["got_contact"] = True
+	handle_message(update, context)
 
 def handleResponse_MaterialAid(update: Update, context: CallbackContext) -> None:
 	if user_info[update.effective_user.id]["status"] == 1:
@@ -252,9 +296,14 @@ def handleResponse_MaterialAid(update: Update, context: CallbackContext) -> None
 		context.bot.send_message(chat_id=update.effective_chat.id, text="Напишите, куда их необходимо доставить: ", reply_markup=reset_button())
 	if user_info[update.effective_user.id]["status"] == 3:
 		user_info[update.effective_user.id]["reply3"] = update.message.text
-		context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram.", reply_markup=reset_button())
-		db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"])
-		send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
+		user_info[update.effective_user.id]["status"] = 4
+	if user_info[update.effective_user.id]["status"]>3:
+		if not(user_info[update.effective_user.id]["got_contact"]):
+			get_phone_number(update, context)
+		else:
+			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"])
+			msg = send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
+			context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram. Ссылка на ваш запрос: https://t.me/material_aid_in_vienna/" + str(msg.message_id), reply_markup=reset_button())
 
 
 def handleResponse_Transport(update: Update, context: CallbackContext) -> None:
@@ -269,22 +318,34 @@ def handleResponse_Transport(update: Update, context: CallbackContext) -> None:
 		context.bot.send_message(chat_id=update.effective_chat.id, text="Коротко опишите цель поездки и важные на ваш взгляд детали: ", reply_markup=reset_button())
 	if user_info[update.effective_user.id]["status"] == 4:
 		user_info[update.effective_user.id]["reply4"] = update.message.text
-		context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram.", reply_markup=reset_button())
-		db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"])
-		send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
+		user_info[update.effective_user.id]["status"] = 5
+	if user_info[update.effective_user.id]["status"]>4:
+		if not(user_info[update.effective_user.id]["got_contact"]):
+			get_phone_number(update, context)
+		else:
+			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"])
+			msg = send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
+			context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram. Ссылка на ваш запрос: https://t.me/transport_in_vienna/" + str(msg.message_id), reply_markup=reset_button())
+
 
 def handleResponse_Translation(update: Update, context: CallbackContext) -> None:
 	if user_info[update.effective_user.id]["status"] == 1:
 		user_info[update.effective_user.id]["reply1"] = update.message.text
-		context.bot.send_message(chat_id=update.effective_chat.id, text="Напишите, необходим ли перевод с русского на немецкий или наоборот (используйте сочетание РУС-НЕМ или НЕМ-РУС): ", reply_markup=reset_button())
+		context.bot.send_message(chat_id=update.effective_chat.id, text="Напишите, с какого языка на какой необходим перевеод (используйте сочетание УКР-НЕМ или НЕМ-УКР): ", reply_markup=reset_button())
 	if user_info[update.effective_user.id]["status"] == 2:
 		user_info[update.effective_user.id]["reply2"] = update.message.text
 		context.bot.send_message(chat_id=update.effective_chat.id, text="Напишите, на когда вам нужен перевод (дата и время, например: 01.01.2022, 12:00): ", reply_markup=reset_button())
 	if user_info[update.effective_user.id]["status"] == 3:
 		user_info[update.effective_user.id]["reply3"] = update.message.text
-		context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram.", reply_markup=reset_button())
-		db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"])
-		send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
+		user_info[update.effective_user.id]["status"] = 4
+	if user_info[update.effective_user.id]["status"]>3:
+		if not(user_info[update.effective_user.id]["got_contact"]):
+			get_phone_number(update, context)
+		else:
+			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"])
+			msg = send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
+			context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram. Ссылка на ваш запрос: https://t.me/translations_in_vienna/" + str(msg.message_id), reply_markup=reset_button())
+
 
 def handleResponse_Accomponation(update: Update, context: CallbackContext) -> None:
 	if user_info[update.effective_user.id]["status"] == 1:
@@ -295,9 +356,15 @@ def handleResponse_Accomponation(update: Update, context: CallbackContext) -> No
 		context.bot.send_message(chat_id=update.effective_chat.id, text="Коротко опишите цель сопровождения и важные на ваш взгляд детали: ", reply_markup=reset_button())
 	if user_info[update.effective_user.id]["status"] == 3:
 		user_info[update.effective_user.id]["reply3"] = update.message.text
-		context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram.", reply_markup=reset_button())
-		db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"])
-		send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
+		user_info[update.effective_user.id]["status"] = 4
+	if user_info[update.effective_user.id]["status"]>3:
+		if not(user_info[update.effective_user.id]["got_contact"]):
+			get_phone_number(update, context)
+		else:
+			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"])
+			msg = send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
+			context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram. Ссылка на ваш запрос: https://t.me/accomponation_in_vienna/" + str(msg.message_id), reply_markup=reset_button())
+
 
 '''
 def handleResponse_Accomponation(update: Update, context: CallbackContext) -> None:
@@ -315,10 +382,11 @@ def main() -> None:
 	updater = Updater("5134551401:AAGsCzW7j9mTBX8aNC3HRyZX2j68wR4Y5KY")
 	
 	updater.dispatcher.add_handler(CommandHandler('start', start))
-	updater.dispatcher.add_handler(CommandHandler('before_start', before_start))
+	#updater.dispatcher.add_handler(CommandHandler('before_start', before_start))
 	updater.dispatcher.add_handler(CommandHandler('help', help_command))
 	updater.dispatcher.add_handler(CallbackQueryHandler(callbackHandler))
 	updater.dispatcher.add_handler(MessageHandler(Filters.text & (~Filters.command), handle_message))
+	updater.dispatcher.add_handler(MessageHandler(Filters.contact, handle_contacts))
 
 
 	# Start the Bot
