@@ -100,7 +100,13 @@ def send_message(update: Update, context: CallbackContext, button):
 		user_info[update.effective_user.id]["reply3"]	+'\n' +
 		'*Информация о поездке:* \n' +
 		user_info[update.effective_user.id]["reply4"])
-		msg = context.bot.send_message(chat_id="@transport_in_vienna", text=message, parse_mode="Markdown")
+		keyboard = [
+			[
+				InlineKeyboardButton("Взять заявку 👍", callback_data='take_request')#, url='https://t.me/victorialapina_bot?param1=123'), #start=something
+			]
+		]
+		markup = InlineKeyboardMarkup(keyboard)
+		msg = context.bot.send_message(chat_id="@transport_in_vienna", text=message, parse_mode="Markdown", reply_markup=markup) #buttons=[[Button.inline('Left'), Button.inline('Right')], [Button.url('Check this site!', 'https://example.com')]])
 		return msg
 	elif button == 'Button_Translation':
 		message = (
@@ -127,6 +133,31 @@ def send_message(update: Update, context: CallbackContext, button):
 		msg = context.bot.send_message(chat_id="@accomponation_in_vienna", text=message, parse_mode="Markdown")
 		return msg
 
+def update_message(update: Update, context: CallbackContext, button):
+	if button == 'take_request':
+		keyboard = [
+			[
+				InlineKeyboardButton("Отказаться от заявки 👎", callback_data='cancel_request')
+			]
+		]
+		markup = InlineKeyboardMarkup(keyboard)
+		msg_id  = update.callback_query.message.message_id
+		msg_txt  = update.callback_query.message.text
+		user_name = update.effective_user.first_name + " " + update.effective_user.last_name
+		taken_text = "\n\n*----- Заявку номер " + str(msg_id) + " взял(а) в работу " + user_name + " -----*\n\n" + msg_txt
+		query = update.callback_query
+		query.edit_message_text(text=taken_text, reply_markup=markup, parse_mode="Markdown")
+	if button == 'cancel_request':
+		keyboard = [
+			[
+				InlineKeyboardButton("Взять заявку 👍", callback_data='take_request')
+			]
+		]
+		markup = InlineKeyboardMarkup(keyboard)
+		msg_txt  = update.callback_query.message.text
+		new_txt = msg_txt.split("-----")
+		query = update.callback_query
+		query.edit_message_text(text=new_txt[2], reply_markup=markup, parse_mode="Markdown")
 
 def db_table_val(user_id: int, user_name: str, phone_number: str, got_contact: bool, role: str, status: int, reply1: str, reply2: str, reply3: str, reply4: str):
 	db_conn = open_db()
@@ -217,6 +248,37 @@ def callbackHandler(update: Update, context: CallbackContext) -> None:
 	query.answer()
 
 	userInput = query.data
+
+	if userInput == "take_request":
+		msg_id  = update.callback_query.message.message_id
+		#msg_txt = update.callback_query.message.text
+		user_id = update.effective_user.id
+		#user_name = update.effective_user.first_name + " " + update.effective_user.last_name
+		#taken_text = "\n\n*Заявку номер " + str(msg_id) + " взял(а) в работу " + user_name + "!*\n\n" + msg_txt
+		#update.callback_query.edit_message_text(text=taken_text, parse_mode="Markdown") #chat_id=update.effective_chat.id, message_id=msg_id, 
+		db_conn = open_db()
+		cursor = db_conn[0]
+		conn = db_conn[1]
+		cursor.execute('INSERT INTO volunteers (user_id, message_id) VALUES (?, ?)', (user_id, msg_id))
+		conn.commit()
+		close_db(conn)
+		update_message(update, context, userInput)
+		return
+
+	if userInput == "cancel_request":
+		msg_id  = update.callback_query.message.message_id
+		#msg_txt = update.callback_query.message.text
+		#new_txt = msg_txt.split("!!")
+		#update.callback_query.edit_message_text(text=new_txt[1], parse_mode="Markdown") 
+		db_conn = open_db()
+		cursor = db_conn[0]
+		conn = db_conn[1]
+		cursor.execute('DELETE FROM volunteers WHERE message_id = (?)', (msg_id,))
+		conn.commit()
+		close_db(conn)
+		update_message(update, context, userInput)
+		return
+
 	if userInput == "Button_Restart":
 		start(update, context)
 		return
@@ -228,7 +290,6 @@ def callbackHandler(update: Update, context: CallbackContext) -> None:
 	if ((userInput == "Button_NeedHelp") and (user_info[update.effective_user.id]["role"] == "Button_ProvideHelp")):
 		start(update, context)
 		return
-
 
 	user_info[update.effective_user.id]["user_id"] = update.effective_user.id
 	user_info[update.effective_user.id]["user_name"] = update.effective_user.name
@@ -250,7 +311,7 @@ def callbackHandler(update: Update, context: CallbackContext) -> None:
 			handleButton_Accomponation(update, context)
 
 	user_info[update.effective_user.id]["status"] += 1
-
+   
 
 def handleButton_MaterialAid(update: Update, context: CallbackContext) -> None:
 	query = update.callback_query
@@ -268,6 +329,13 @@ def handleButton_Accomponation(update: Update, context: CallbackContext) -> None
 	query = update.callback_query
 	query.edit_message_text(text=f"Пожалуйста, напишите, куда вас нужно сопроводить: ", reply_markup=reset_button())
 
+#def handleButton_Take(update: Update, context: CallbackContext) -> None:
+#	query = update.callback_query
+#	query.edit_message_text(text=f"Пожалуйста, напишите, куда вас нужно сопроводить: ", reply_markup=reset_button())
+
+#def handleButton_Cancel(update: Update, context: CallbackContext) -> None:
+#	query = update.callback_query
+#	query.edit_message_text(text=f"Пожалуйста, напишите, куда вас нужно сопроводить: ", reply_markup=reset_button())
 
 def handle_message(update: Update, context: CallbackContext) -> None:
 	if user_info[update.effective_user.id]["chosen_button"] == 'Button_MaterialAid':
@@ -379,7 +447,7 @@ def help_command(update: Update, context: CallbackContext) -> None:
 def main() -> None:
 	"""Run the bot."""
 	# Create the Updater and pass it your bot's token.
-	updater = Updater("5134551401:AAGsCzW7j9mTBX8aNC3HRyZX2j68wR4Y5KY")
+	updater = Updater("5229228704:AAEAsJ5DZ0Zs_PEw7Y0Ub--sPOoG98Tr8MY")
 	
 	updater.dispatcher.add_handler(CommandHandler('start', start))
 	#updater.dispatcher.add_handler(CommandHandler('before_start', before_start))
@@ -387,8 +455,7 @@ def main() -> None:
 	updater.dispatcher.add_handler(CallbackQueryHandler(callbackHandler))
 	updater.dispatcher.add_handler(MessageHandler(Filters.text & (~Filters.command), handle_message))
 	updater.dispatcher.add_handler(MessageHandler(Filters.contact, handle_contacts))
-
-
+    
 	# Start the Bot
 	updater.start_polling()
 
