@@ -10,6 +10,7 @@ import logging
 import time
 import sqlite3
 import requests
+from datetime import date
 #requests.post('https://api.telegram.org/bot5134551401:AAGsCzW7j9mTBX8aNC3HRyZX2j68wR4Y5KY/sendMessage?chat_id=@transport_helo_vienna&text='+)
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, Contact
@@ -53,8 +54,6 @@ def open_db():
 
 def close_db(conn):
 	conn.close()
-
-user_info = {}
 
 def remove_markdown(string):
 		return string.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
@@ -134,19 +133,31 @@ def send_message(update: Update, context: CallbackContext, button):
 		return msg
 
 def update_message(update: Update, context: CallbackContext, button):
+	
 	if button == 'take_request':
-		keyboard = [
-			[
-				InlineKeyboardButton("Отказаться от заявки 👎", callback_data='cancel_request')
-			]
-		]
-		markup = InlineKeyboardMarkup(keyboard)
+		user_id = update.effective_user.id
 		msg_id  = update.callback_query.message.message_id
-		msg_txt  = update.callback_query.message.text
-		user_name = update.effective_user.first_name + " " + update.effective_user.last_name
-		taken_text = "\n\n*----- Заявку номер " + str(msg_id) + " взял(а) в работу " + user_name + " -----*\n\n" + msg_txt
-		query = update.callback_query
-		query.edit_message_text(text=taken_text, reply_markup=markup, parse_mode="Markdown")
+
+		db_conn = open_db()
+		cursor = db_conn[0]
+		conn = db_conn[1]
+		cursor.execute('SELECT * FROM volunteers WHERE (user_id, message_id) = (?, ?)', (user_id, msg_id))
+		records = cursor.fetchall()
+		close_db(conn)
+		taken_flag = len(records) 
+
+		if taken_flag > 0:
+			keyboard = [
+				[
+					InlineKeyboardButton("Отказаться от заявки 👎", callback_data='cancel_request')
+				]
+			]
+			markup = InlineKeyboardMarkup(keyboard)
+			msg_txt  = update.callback_query.message.text
+			user_name = update.effective_user.first_name + " " + update.effective_user.last_name
+			taken_text = "\n\n*----- Заявку номер " + str(msg_id) + " взял(а) в работу " + user_name + " -----*\n\n" + msg_txt
+			query = update.callback_query
+			query.edit_message_text(text=taken_text, reply_markup=markup, parse_mode="Markdown")
 	if button == 'cancel_request':
 		keyboard = [
 			[
@@ -206,14 +217,15 @@ def start(update: Update, context: CallbackContext):
 def handleButton_need_help(update: Update, context: CallbackContext):
 	keyboard = [
 		[
-			InlineKeyboardButton("⛑ Вещи и медикаменты", callback_data='Button_MaterialAid'),
-			InlineKeyboardButton("🚙 Поиск транспорта", callback_data='Button_Transport'),
+			InlineKeyboardButton("⛑ Вещи / Mедикаменты", callback_data='Button_MaterialAid'),
+			InlineKeyboardButton("🚙 Транспорт", callback_data='Button_Transport'),
 		],
 		[
-			InlineKeyboardButton("💬 Перевод с/на немецкий", callback_data='Button_Translation'),
+			InlineKeyboardButton("💬 Языковые Переводы", callback_data='Button_Translation'),
 			InlineKeyboardButton("🧍🏻 Сопровождение", callback_data='Button_Accomponation'),
 		],
 		[
+			InlineKeyboardButton("💡 Информация", callback_data='Button_Info'),
 			InlineKeyboardButton("🔄 Начать заново", callback_data='Button_Restart'),
 		],
 	]
@@ -250,33 +262,41 @@ def callbackHandler(update: Update, context: CallbackContext) -> None:
 	userInput = query.data
 
 	if userInput == "take_request":
-		msg_id  = update.callback_query.message.message_id
-		#msg_txt = update.callback_query.message.text
-		user_id = update.effective_user.id
-		#user_name = update.effective_user.first_name + " " + update.effective_user.last_name
-		#taken_text = "\n\n*Заявку номер " + str(msg_id) + " взял(а) в работу " + user_name + "!*\n\n" + msg_txt
-		#update.callback_query.edit_message_text(text=taken_text, parse_mode="Markdown") #chat_id=update.effective_chat.id, message_id=msg_id, 
+		# first of all, check takes limit
+		today = date.today()
 		db_conn = open_db()
 		cursor = db_conn[0]
 		conn = db_conn[1]
-		cursor.execute('INSERT INTO volunteers (user_id, message_id) VALUES (?, ?)', (user_id, msg_id))
-		conn.commit()
+		user_id = update.effective_user.id
+		cursor.execute('SELECT * FROM volunteers WHERE user_id = (?) AND date_taken = (?)', (user_id, today)) #COUNT(message_id)
+		records = cursor.fetchall()
+		taken_num = len(records) 
+		#print(taken_num)
+		# if ok, take the request
+		if taken_num < 5:
+			msg_id  = update.callback_query.message.message_id
+			cursor.execute('INSERT INTO volunteers (user_id, message_id, date_taken) VALUES (?, ?, ?)', (user_id, msg_id, today))
+			conn.commit()
+			update_message(update, context, userInput)
+			return
+		else:
+			context.bot.send_message(chat_id=user_id, text="Извините, но Вы исчерпали максимальное количество взятых заявок.")
 		close_db(conn)
-		update_message(update, context, userInput)
-		return
 
 	if userInput == "cancel_request":
+		user_id = update.effective_user.id
 		msg_id  = update.callback_query.message.message_id
-		#msg_txt = update.callback_query.message.text
-		#new_txt = msg_txt.split("!!")
-		#update.callback_query.edit_message_text(text=new_txt[1], parse_mode="Markdown") 
 		db_conn = open_db()
 		cursor = db_conn[0]
 		conn = db_conn[1]
-		cursor.execute('DELETE FROM volunteers WHERE message_id = (?)', (msg_id,))
-		conn.commit()
-		close_db(conn)
-		update_message(update, context, userInput)
+		cursor.execute('SELECT * FROM volunteers WHERE (user_id, message_id) = (?, ?)', (user_id, msg_id))
+		records = cursor.fetchall()
+		taken_flag = len(records) 
+		if taken_flag > 0:
+			cursor.execute('DELETE FROM volunteers WHERE message_id = (?)', (msg_id,))
+			conn.commit()
+			close_db(conn)
+			update_message(update, context, userInput)
 		return
 
 	if userInput == "Button_Restart":
@@ -448,6 +468,9 @@ def main() -> None:
 	"""Run the bot."""
 	# Create the Updater and pass it your bot's token.
 	updater = Updater("5229228704:AAEAsJ5DZ0Zs_PEw7Y0Ub--sPOoG98Tr8MY")
+
+	global user_info
+	user_info = {}
 	
 	updater.dispatcher.add_handler(CommandHandler('start', start))
 	#updater.dispatcher.add_handler(CommandHandler('before_start', before_start))
