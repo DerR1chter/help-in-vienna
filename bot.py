@@ -85,7 +85,14 @@ def send_message(update: Update, context: CallbackContext, button):
 		user_info[update.effective_user.id]["reply2"] + '\n' +
 		'*Куда доставить:* \n' +
 		user_info[update.effective_user.id]["reply3"])
-		msg = context.bot.send_message(chat_id="@material_aid_in_vienna", text=message, parse_mode="Markdown")
+
+		keyboard = [
+			[
+				InlineKeyboardButton("Взять заявку 👍", callback_data='take_request')
+			]
+		]
+		markup = InlineKeyboardMarkup(keyboard)
+		msg = context.bot.send_message(chat_id="@material_aid_in_vienna", text=message, parse_mode="Markdown", reply_markup=markup)
 		return msg
 	elif button == 'Button_Transport':
 		message = (
@@ -118,7 +125,14 @@ def send_message(update: Update, context: CallbackContext, button):
 		user_info[update.effective_user.id]["reply2"] + '\n' +
 		'*На когда:* \n' +
 		user_info[update.effective_user.id]["reply3"])
-		msg = context.bot.send_message(chat_id="@translations_in_vienna", text=message, parse_mode="Markdown")
+
+		keyboard = [
+			[
+				InlineKeyboardButton("Взять заявку 👍", callback_data='take_request')
+			]
+		]
+		markup = InlineKeyboardMarkup(keyboard)
+		msg = context.bot.send_message(chat_id="@translations_in_vienna", text=message, parse_mode="Markdown", reply_markup=markup)
 		return msg
 	elif button == 'Button_Accomponation':
 		message = (
@@ -129,8 +143,15 @@ def send_message(update: Update, context: CallbackContext, button):
 		'*Когда:* \n' +
 		user_info[update.effective_user.id]["reply2"] + '\n' +
 		'*Доп. информация:* \n' +
-		user_info[update.effective_user.id]["reply3"])		
-		msg = context.bot.send_message(chat_id="@accomponation_in_vienna", text=message, parse_mode="Markdown")
+		user_info[update.effective_user.id]["reply3"])	
+
+		keyboard = [
+			[
+				InlineKeyboardButton("Взять заявку 👍", callback_data='take_request')
+			]
+		]
+		markup = InlineKeyboardMarkup(keyboard)	
+		msg = context.bot.send_message(chat_id="@accomponation_in_vienna", text=message, parse_mode="Markdown", reply_markup=markup)
 		return msg
 
 def update_message(update: Update, context: CallbackContext, button):
