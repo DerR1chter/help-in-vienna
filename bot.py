@@ -157,41 +157,25 @@ def send_message(update: Update, context: CallbackContext, button):
 def update_message(update: Update, context: CallbackContext, button):
 	
 	if button == 'take_request':
-		user_id = update.effective_user.id
-		msg_id  = update.callback_query.message.message_id
-
-		db_conn = open_db()
-		cursor = db_conn[0]
-		conn = db_conn[1]
-		cursor.execute('SELECT * FROM users WHERE (user_id, message_id) = (?, ?)', (user_id, msg_id))
-		user_created = cursor.fetchall()
-		cursor.execute('SELECT * FROM volunteers WHERE (user_id, message_id) = (?, ?)', (user_id, msg_id))
-		volunteer_took = cursor.fetchall()
-		close_db(conn)
-		the_same_user = len(user_created)
-		taken_flag = len(volunteer_took) 
-
-		if the_same_user > 0:
-			context.bot.send_message(chat_id=user_id, text="Извините, но Вы не можете взять в работу свою заявку.")
-		elif taken_flag > 0:
-			keyboard = [
-				[
-					InlineKeyboardButton("Отказаться от заявки 👎", callback_data='cancel_request')
-				]
+		keyboard = [
+			[
+				InlineKeyboardButton("Отказаться от заявки 👎", callback_data='cancel_request')
 			]
-			markup = InlineKeyboardMarkup(keyboard)
-			msg_txt  = update.callback_query.message.text
-			user_name = update.effective_user.first_name + " " + update.effective_user.last_name
-			word_arr = re.findall("[А-я ]+\:", msg_txt)
-			new_arr = []
-			for word in word_arr:
-				new_word = "*" + word + "*"
-				new_arr.append(new_word)
-				msg_txt = msg_txt.replace(word, new_word)
-			#print(new_arr)
-			taken_text = "\n\n*----- Заявку номер " + str(msg_id) + " взял(а) в работу " + user_name + " -----*\n\n" + msg_txt
-			query = update.callback_query
-			query.edit_message_text(text=taken_text, reply_markup=markup, parse_mode="Markdown")
+		]
+		markup = InlineKeyboardMarkup(keyboard)
+		msg_id  = update.callback_query.message.message_id
+		msg_txt  = remove_markdown(update.callback_query.message.text)
+		user_name = update.effective_user.first_name + " " + update.effective_user.last_name
+		word_arr = re.findall("[А-я .]+\:", msg_txt)
+		new_arr = []
+		for word in word_arr:
+			new_word = "*" + word + "*"
+			new_arr.append(new_word)
+			msg_txt = msg_txt.replace(word, new_word)
+		#print(new_arr)
+		taken_text = "\n\n*----- Заявку номер " + str(msg_id) + " взял(а) в работу " + user_name + " -----*\n\n" + msg_txt
+		query = update.callback_query
+		query.edit_message_text(text=taken_text, reply_markup=markup, parse_mode="Markdown")
 	if button == 'cancel_request':
 		keyboard = [
 			[
@@ -200,8 +184,9 @@ def update_message(update: Update, context: CallbackContext, button):
 		]
 		markup = InlineKeyboardMarkup(keyboard)
 		msg_txt  = update.callback_query.message.text
+		msg_txt  = remove_markdown(update.callback_query.message.text)
 		user_name = update.effective_user.first_name + " " + update.effective_user.last_name
-		word_arr = re.findall("[А-я ]+\:", msg_txt)
+		word_arr = re.findall("[А-я .]+\:", msg_txt)
 		new_arr = []
 		for word in word_arr:
 			new_word = "*" + word + "*"
@@ -211,11 +196,11 @@ def update_message(update: Update, context: CallbackContext, button):
 		query = update.callback_query
 		query.edit_message_text(text=new_txt[2], reply_markup=markup, parse_mode="Markdown")
 
-def db_table_val(user_id: int, user_name: str, phone_number: str, got_contact: bool, role: str, status: int, reply1: str, reply2: str, reply3: str, reply4: str, chosen_button: str, message_id: int):
+def db_table_val(user_id: int, user_name: str, phone_number: str, got_contact: bool, role: str, status: int, reply1: str, reply2: str, reply3: str, reply4: str, chosen_button: str, message_id: int, category: str):
 	db_conn = open_db()
 	cursor = db_conn[0]
 	conn = db_conn[1]
-	cursor.execute('INSERT INTO users (user_id,user_name,phone_number,got_contact,role,status,reply1,reply2,reply3,reply4,chosen_button, message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (user_id, user_name, phone_number, got_contact, role, status, reply1, reply2, reply3, reply4, chosen_button, message_id))
+	cursor.execute('INSERT INTO users (user_id,user_name,phone_number,got_contact,role,status,reply1,reply2,reply3,reply4,chosen_button, message_id, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (user_id, user_name, phone_number, got_contact, role, status, reply1, reply2, reply3, reply4, chosen_button, message_id, category))
 	conn.commit()
 	close_db(conn)
 	
@@ -242,7 +227,8 @@ def before_start(update: Update, context: CallbackContext):
 def start(update: Update, context: CallbackContext):
 	"""Sends a message with three inline buttons attached."""
 	user_info[update.effective_user.id] = {"user_id":"", "user_name":"", "phone_number":"", "got_contact":False, "role":"", "status":-1, "chosen_button":"", "reply1":"", "reply2":"", "reply3":"", "reply4":"", "category":""}
-	
+	#user_info[update.effective_user.id] = update.effective_user.id
+	#user_info[update.effective_user.name] = update.effective_user.name
 
 	keyboard = [
 		[
@@ -302,42 +288,64 @@ def callbackHandler(update: Update, context: CallbackContext) -> None:
 
 	userInput = query.data
 
+	cat_array = {"Вещи и медикаменты в Вене": "material_aid", "Транспорт в Вене" : "transport", "Языковая помощь в Вене" : "translation", "Сопровождение в Вене" : "acompanation"}
+
 	if userInput == "take_request":
-		# first of all, check takes limit
-		today = date.today()
+		user_id = update.effective_user.id
+		msg_id  = update.callback_query.message.message_id
+		category = cat_array[update.effective_chat.title]
+		#print(update.effective_chat.title)
+		#print(category)
+
 		db_conn = open_db()
 		cursor = db_conn[0]
 		conn = db_conn[1]
-		user_id = update.effective_user.id
-		cursor.execute('SELECT * FROM volunteers WHERE user_id = (?) AND date_taken = (?)', (user_id, today)) #COUNT(message_id)
-		records = cursor.fetchall()
-		taken_num = len(records) 
-		# if ok, take the request
-		if taken_num < 5:
-			msg_id  = update.callback_query.message.message_id
-			user_name = update.effective_user.name
-			cursor.execute('INSERT INTO volunteers (user_id, user_name, message_id, date_taken) VALUES (?, ?, ?, ?)', (user_id, user_name, msg_id, today))
-			conn.commit()
-			update_message(update, context, userInput)
-			return
+		cursor.execute('SELECT * FROM users WHERE (user_id, message_id, category) = (?, ?, ?)', (user_id, msg_id, category))
+		user_created = cursor.fetchall()
+		#cursor.execute('SELECT * FROM volunteers WHERE (user_id, message_id, category) = (?, ?, ?)', (user_id, msg_id, category))
+		#volunteer_took = cursor.fetchall()
+		the_same_user = len(user_created)
+		#taken_flag = len(volunteer_took) 
+
+		if the_same_user > 0:
+			context.bot.send_message(chat_id=user_id, text="Извините, но Вы не можете взять в работу свою заявку.")
+		#elif taken_flag > 0:
 		else:
-			context.bot.send_message(chat_id=user_id, text="Извините, но Вы исчерпали максимальное количество взятых заявок.")
+			# first of all, check takes limit
+			today = date.today()
+			cursor.execute('SELECT * FROM volunteers WHERE user_id = (?) AND date_taken = (?)', (user_id, today)) #COUNT(message_id)
+			records = cursor.fetchall()
+			taken_num = len(records) 
+			# if ok, take the request
+			if taken_num < 5:
+				msg_id  = update.callback_query.message.message_id
+				user_name = update.effective_user.name
+				cursor.execute('INSERT INTO volunteers (user_id, user_name, message_id, date_taken, category) VALUES (?, ?, ?, ?, ?)', (user_id, user_name, msg_id, today, category))
+				conn.commit()
+				update_message(update, context, userInput)
+				return
+			else:
+				context.bot.send_message(chat_id=user_id, text="Извините, но Вы исчерпали максимальное количество взятых заявок.")
 		close_db(conn)
 
 	if userInput == "cancel_request":
 		user_id = update.effective_user.id
 		msg_id  = update.callback_query.message.message_id
+		category = cat_array[update.effective_chat.title]
+
 		db_conn = open_db()
 		cursor = db_conn[0]
 		conn = db_conn[1]
-		cursor.execute('SELECT * FROM volunteers WHERE (user_id, message_id) = (?, ?)', (user_id, msg_id))
+		cursor.execute('SELECT * FROM volunteers WHERE (user_id, message_id, category) = (?, ?, ?)', (user_id, msg_id, category))
 		records = cursor.fetchall()
 		taken_flag = len(records) 
 		if taken_flag > 0:
 			cursor.execute('DELETE FROM volunteers WHERE message_id = (?)', (msg_id,))
 			conn.commit()
-			close_db(conn)
 			update_message(update, context, userInput)
+		else:
+			context.bot.send_message(chat_id=user_id, text="Извините, но Вы не можете отказаться от заявки, взятой другим волонтером.")
+		close_db(conn)
 		return
 
 	if userInput == "Button_Restart":
@@ -354,6 +362,8 @@ def callbackHandler(update: Update, context: CallbackContext) -> None:
 
 	user_info[update.effective_user.id]["user_id"] = update.effective_user.id
 	user_info[update.effective_user.id]["user_name"] = update.effective_user.name
+	#user_info[update.effective_user.id]["category"] = update.chat.title
+
 	if user_info[update.effective_user.id]["status"] == -1:
 		user_info[update.effective_user.id]["role"] = userInput
 		if (user_info[update.effective_user.id]["role"] == "Button_ProvideHelp"):
@@ -431,7 +441,7 @@ def handleResponse_MaterialAid(update: Update, context: CallbackContext) -> None
 			get_phone_number(update, context)
 		else:
 			msg = send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
-			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"], chosen_button=user_info[update.effective_user.id]["chosen_button"], message_id = msg.message_id )
+			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"], chosen_button=user_info[update.effective_user.id]["chosen_button"], message_id = msg.message_id, category = "material_aid")
 			context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram. Ссылка на ваш запрос: https://t.me/material_aid_in_vienna/" + str(msg.message_id), reply_markup=reset_button())
 
 
@@ -453,14 +463,14 @@ def handleResponse_Transport(update: Update, context: CallbackContext) -> None:
 			get_phone_number(update, context)
 		else:
 			msg = send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
-			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"], chosen_button=user_info[update.effective_user.id]["chosen_button"], message_id = msg.message_id )
+			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"], chosen_button=user_info[update.effective_user.id]["chosen_button"], message_id = msg.message_id, category = "transport")
 			context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram. Ссылка на ваш запрос: https://t.me/transport_in_vienna/" + str(msg.message_id), reply_markup=reset_button())
 
 
 def handleResponse_Translation(update: Update, context: CallbackContext) -> None:
 	if user_info[update.effective_user.id]["status"] == 1:
 		user_info[update.effective_user.id]["reply1"] = update.message.text
-		context.bot.send_message(chat_id=update.effective_chat.id, text="Напишите, с какого языка на какой необходим перевеод (используйте сочетание УКР-НЕМ или НЕМ-УКР): ", reply_markup=reset_button())
+		context.bot.send_message(chat_id=update.effective_chat.id, text="Напишите, с какого языка на какой необходим перевод (используйте сочетание УКР-НЕМ или НЕМ-УКР): ", reply_markup=reset_button())
 	if user_info[update.effective_user.id]["status"] == 2:
 		user_info[update.effective_user.id]["reply2"] = update.message.text
 		context.bot.send_message(chat_id=update.effective_chat.id, text="Напишите, на когда вам нужен перевод (дата и время, например: 01.01.2022, 12:00): ", reply_markup=reset_button())
@@ -472,7 +482,7 @@ def handleResponse_Translation(update: Update, context: CallbackContext) -> None
 			get_phone_number(update, context)
 		else:
 			msg = send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
-			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"], chosen_button=user_info[update.effective_user.id]["chosen_button"], message_id = msg.message_id )
+			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"], chosen_button=user_info[update.effective_user.id]["chosen_button"], message_id = msg.message_id, category = "accomponation")
 			context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram. Ссылка на ваш запрос: https://t.me/translations_in_vienna/" + str(msg.message_id), reply_markup=reset_button())
 
 
@@ -491,7 +501,7 @@ def handleResponse_Accomponation(update: Update, context: CallbackContext) -> No
 			get_phone_number(update, context)
 		else:
 			msg = send_message(update, context, user_info[update.effective_user.id]["chosen_button"])
-			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"], chosen_button=user_info[update.effective_user.id]["chosen_button"], message_id = msg.message_id )
+			db_table_val(user_id=user_info[update.effective_user.id]["user_id"], user_name=user_info[update.effective_user.id]["user_name"], phone_number=user_info[update.effective_user.id]["phone_number"], got_contact=user_info[update.effective_user.id]["got_contact"], role=user_info[update.effective_user.id]["role"], status=user_info[update.effective_user.id]["status"], reply1=user_info[update.effective_user.id]["reply1"], reply2=user_info[update.effective_user.id]["reply2"], reply3=user_info[update.effective_user.id]["reply3"], reply4=user_info[update.effective_user.id]["reply4"], chosen_button=user_info[update.effective_user.id]["chosen_button"], message_id = msg.message_id, category = "transport")
 			context.bot.send_message(chat_id=update.effective_chat.id, text="Ваша заявка была создана! Волонтёры свяжутся с вами через Telegram. Ссылка на ваш запрос: https://t.me/accomponation_in_vienna/" + str(msg.message_id), reply_markup=reset_button())
 
 
